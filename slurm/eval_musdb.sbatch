@@ -1,8 +1,8 @@
 #!/bin/bash
 # MUSDB18-HQ test SDR for a BS-RoFormer checkpoint on ONE H200.
 #
-#   BSRO_MUSDB=$HOME/work/orfeo/musdb18hq BSRO_MODEL=4stem sbatch slurm/eval_musdb.sbatch
-#   BSRO_MUSDB=... BSRO_MODEL=vocals BSRO_LIMIT=3 sbatch slurm/eval_musdb.sbatch   # smoke test
+#   BSRO_MUSDB=$HOME/work/orfeo/musdb18hq sbatch slurm/eval_musdb.sbatch
+#   BSRO_MUSDB=... BSRO_LIMIT=3 sbatch slurm/eval_musdb.sbatch   # smoke test
 #SBATCH --job-name=bsro-musdb
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -19,18 +19,10 @@ set -euo pipefail
 REPO_DIR="${BSRO_REPO_DIR:-$SLURM_SUBMIT_DIR}"
 WEIGHTS_DIR="${BSRO_WEIGHTS_DIR:-$REPO_DIR/weights}"
 MUSDB="${BSRO_MUSDB:?set BSRO_MUSDB to the MUSDB18-HQ root (contains test/)}"
-MODEL="${BSRO_MODEL:-4stem}"
-OUTPUT="${BSRO_OUTPUT:-$HOME/work/orfeo/eval/musdb_${MODEL}_$SLURM_JOB_ID}"
+OUTPUT="${BSRO_OUTPUT:-$HOME/work/orfeo/eval/musdb_$SLURM_JOB_ID}"
 
-case "$MODEL" in
-    4stem)
-        CONFIG="$REPO_DIR/configs/config_bs_roformer_384_8_2_485100.yaml"
-        CKPT="$WEIGHTS_DIR/model_bs_roformer_ep_17_sdr_9.6568.ckpt" ;;
-    vocals)
-        CONFIG="$REPO_DIR/configs/model_bs_roformer_ep_317_sdr_12.9755.yaml"
-        CKPT="$WEIGHTS_DIR/model_bs_roformer_ep_317_sdr_12.9755.ckpt" ;;
-    *) echo "unknown BSRO_MODEL=$MODEL" >&2; exit 1 ;;
-esac
+CONFIG="$REPO_DIR/configs/model_bs_roformer_ep_317_sdr_12.9755.yaml"
+CKPT="$WEIGHTS_DIR/model_bs_roformer_ep_317_sdr_12.9755.ckpt"
 [ -f "$CKPT" ] || { echo "missing checkpoint $CKPT" >&2; exit 1; }
 [ -d "$MUSDB/test" ] || { echo "missing $MUSDB/test" >&2; exit 1; }
 

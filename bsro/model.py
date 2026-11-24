@@ -5,8 +5,6 @@ from pathlib import Path
 import torch
 import yaml
 from bs_roformer import BSRoformer
-from bs_roformer.bs_roformer import MaskEstimator
-from torch.nn import ModuleList
 
 # Keys present in the MSST training configs that lucidrains' BSRoformer does not accept.
 _IGNORED_MODEL_KEYS = ("linear_transformer_depth", "use_torch_checkpoint", "skip_connection")
@@ -29,23 +27,9 @@ def load_config(path: str | Path) -> dict:
 
 def build_model(config: dict) -> BSRoformer:
     params = dict(config["model"])
-    mlp_expansion_factor = params.pop("mlp_expansion_factor", 4)
     for key in _IGNORED_MODEL_KEYS:
         params.pop(key, None)
-    model = BSRoformer(**params)
-    # MSST checkpoints may use a narrower mask-estimator MLP than lucidrains' fixed default of 4.
-    if mlp_expansion_factor != 4:
-        dim_inputs = model.mask_estimators[0].dim_inputs
-        model.mask_estimators = ModuleList(
-            MaskEstimator(
-                params["dim"],
-                dim_inputs,
-                params["mask_estimator_depth"],
-                mlp_expansion_factor=mlp_expansion_factor,
-            )
-            for _ in range(params["num_stems"])
-        )
-    return model
+    return BSRoformer(**params)
 
 
 def load_checkpoint(model: BSRoformer, path: str | Path) -> BSRoformer:

@@ -33,10 +33,7 @@ def test_window_edges():
 
 
 def test_config_stem_names():
-    four = load_config("configs/config_bs_roformer_384_8_2_485100.yaml")
-    assert stem_names(four) == ["drums", "bass", "other", "vocals"]
-    assert residual_name(four) is None
-    assert isinstance(four["model"]["freqs_per_bands"], tuple)
     vocals = load_config("configs/model_bs_roformer_ep_317_sdr_12.9755.yaml")
     assert stem_names(vocals) == ["vocals"]
     assert residual_name(vocals) == "other"
+    assert isinstance(vocals["model"]["freqs_per_bands"], tuple)

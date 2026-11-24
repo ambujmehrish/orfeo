@@ -1,73 +1,62 @@
 # orfeo
 
-Music source separation experiments with [BS-RoFormer](https://github.com/lucidrains/BS-RoFormer) (lucidrains implementation, pinned to 0.4.1, the last release whose architecture matches the public pretrained checkpoints).
+Vocal separation for the ORFEO pipeline with [BS-RoFormer](https://github.com/lucidrains/BS-RoFormer) (lucidrains implementation, pinned to 0.4.1, the last release whose architecture matches the public pretrained checkpoint). Accompaniment is mix − vocals.
 
-## Setup (H200 server)
+Checkpoint: viperx `model_bs_roformer_ep_317_sdr_12.9755.ckpt` (trained with ZFTurbo's MSST code; vocals SDR 12.98), config `configs/model_bs_roformer_ep_317_sdr_12.9755.yaml`.
+
+## Setup (vhpc)
 
 ```bash
 bash scripts/setup_env.sh bsroformer            # fresh conda env: python 3.11, torch 2.6.0 cu124
-BSRO_WEIGHTS_DIR=/path/to/weights bash scripts/download_weights.sh all
-```
-
-Checkpoints (trained with ZFTurbo's MSST code, loaded here into lucidrains' `BSRoformer`):
-
-| model | stems | config | checkpoint |
-|---|---|---|---|
-| 4-stem (MUSDB18 SDR 9.66) | drums, bass, other, vocals | `configs/config_bs_roformer_384_8_2_485100.yaml` | `model_bs_roformer_ep_17_sdr_9.6568.ckpt` |
-| vocals, viperx (SDR 12.98) | vocals + other (residual) | `configs/model_bs_roformer_ep_317_sdr_12.9755.yaml` | `model_bs_roformer_ep_317_sdr_12.9755.ckpt` |
-
-## Separate
-
-```bash
-conda activate bsroformer
-python -m bsro.separate \
-    --config configs/config_bs_roformer_384_8_2_485100.yaml \
-    --checkpoint "$BSRO_WEIGHTS_DIR/model_bs_roformer_ep_17_sdr_9.6568.ckpt" \
-    --input /path/to/song.wav_or_dir --output outputs/run1
-```
-
-Stems are written to `outputs/run1/<track>/<stem>.wav` (44.1 kHz float wav) plus `manifest.json` with checkpoint, code revision, device and chunking settings.
-
-SLURM (one H200 on `gpus`): `BSRO_MODEL=4stem sbatch slurm/separate.sbatch` separates everything in `data/`; outputs go to `$HOME/work/orfeo/outputs/<jobid>/`.
-
-## Tests
-
-```bash
+BSRO_WEIGHTS_DIR=$PWD/weights bash scripts/download_weights.sh
 python -m pytest -q tests
 ```
 
-## Evaluate separation quality
+## Separate
 
-**Reference-free screen** (the ORFEO quality screen: level, bleed, and agreement between two separators). Run both models on the same inputs, then:
+Everything in `data/` on one GPU (defaults to an H200 on `gpus`; any 24 GB+ GPU works):
 
 ```bash
-python -m bsro.screen --run $HOME/work/orfeo/outputs/<vocals_job> --reference-run $HOME/work/orfeo/outputs/<4stem_job> --inputs data
+sbatch slurm/separate.sbatch
+sbatch --partition=gpulongjobs --qos=gpulongjobs --gres=gpu:a40:1 slurm/separate.sbatch
 ```
 
-Writes `screen.csv` (per-track metrics and accept/reject/instrumental) and `screen.json` (counts and thresholds) into the run directory.
-
-**Ground truth** on MUSDB18-HQ test (SDR as reported by MSST, plus SI-SDR), to confirm the lucidrains loading and chunked inference match the published numbers (4-stem: avg 9.65; vocals 11.08):
+Stems land in `$HOME/work/orfeo/outputs/<jobid>/<track>/{vocals,other}.wav` (44.1 kHz float wav) with `manifest.json` (checkpoint, code revision, device, chunking). Direct use:
 
 ```bash
-BSRO_MUSDB=$HOME/work/orfeo/musdb18hq BSRO_MODEL=4stem sbatch slurm/eval_musdb.sbatch
+python -m bsro.separate --config configs/model_bs_roformer_ep_317_sdr_12.9755.yaml --checkpoint weights/model_bs_roformer_ep_317_sdr_12.9755.ckpt --input data --output outputs/run1
+```
+
+## Quality screen (no ground truth)
+
+Level, activity and bleed checks on the vocal stem; agreement metrics appear only if a second run is given with `--reference-run`:
+
+```bash
+python -m bsro.screen --run $HOME/work/orfeo/outputs/<jobid> --inputs data
+```
+
+Writes `screen.csv` (per-track metrics, accept/reject/instrumental) and `screen.json` (counts, thresholds) into the run directory.
+
+## Ground truth on MUSDB18-HQ
+
+SDR as reported by MSST plus SI-SDR on the 50 test songs, to confirm the lucidrains loading and chunked inference reproduce the published numbers:
+
+```bash
+BSRO_MUSDB=$HOME/work/orfeo/musdb18hq sbatch slurm/eval_musdb.sbatch
 ```
 
 ## Listen and inspect
 
-Gradio app with the original mix, the stems of both runs per track, the screen charts and the metrics table:
-
 ```bash
-python -m bsro.review_app --inputs data --run vocals=$HOME/work/orfeo/outputs/1508415 --run 4stem=$HOME/work/orfeo/outputs/1508406
+python -m bsro.review_app --inputs data --run vocals=$HOME/work/orfeo/outputs/<jobid>
 ```
 
-Open it from your laptop through an SSH tunnel (`ssh -N -L 7860:127.0.0.1:7860 <user>@vhpc01`, then http://localhost:7860), or add `--share` for a temporary public gradio.live link.
+Then tunnel: `ssh -R 80:127.0.0.1:7860 serveo.net` (public link) or `ssh -N -L 7860:127.0.0.1:7860 <user>@vhpc01` (http://localhost:7860).
 
 ## Lyrics from the vocal stems
 
-Whisper on the separated vocals (tracks the screen marked instrumental are skipped):
-
 ```bash
-BSRO_RUN=$HOME/work/orfeo/outputs/1508415 sbatch slurm/transcribe.sbatch
+BSRO_RUN=$HOME/work/orfeo/outputs/<jobid> sbatch slurm/transcribe.sbatch
 ```
 
-Writes `<run>/lyrics_large-v3/<track>.json` (language, text, timed segments with confidence) and `lyrics.csv`. Set `BSRO_WHISPER=turbo` for a faster model or `BSRO_LANGUAGE=en` to force a language.
+Whisper large-v3 on each vocal stem (instrumental tracks skipped). Writes `<run>/lyrics_large-v3/<track>.json` and `lyrics.csv`. `BSRO_WHISPER=turbo` for a faster model, `BSRO_LANGUAGE=en` to force a language.
