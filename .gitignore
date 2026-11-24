@@ -4,3 +4,5 @@ __pycache__/
 weights/
 outputs/
 logs/
+data/*
+!data/.gitkeep
