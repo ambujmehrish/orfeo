@@ -28,7 +28,7 @@ python -m bsro.separate \
 
 Stems are written to `outputs/run1/<track>/<stem>.wav` (44.1 kHz float wav) plus `manifest.json` with checkpoint, code revision, device and chunking settings.
 
-SLURM: `BSRO_INPUT=/path/to/audio BSRO_MODEL=4stem sbatch slurm/separate.sbatch` (fill in the partition/account for the H200 node first).
+SLURM (one H200 on `gpus`): `BSRO_MODEL=4stem sbatch slurm/separate.sbatch` separates everything in `data/`; outputs go to `$HOME/work/orfeo/outputs/<jobid>/`.
 
 ## Tests
 

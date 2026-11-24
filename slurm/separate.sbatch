@@ -1,11 +1,21 @@
-#!/usr/bin/env bash
-# BS-RoFormer separation on one H200.
-# Submit: sbatch slurm/separate.sbatch
-# H200 nodes on vhpc: partition "gpus" (vhpc13-15) or "gpulongjobs" (vhpc11-12,25-28).
+#!/bin/bash
+# BS-RoFormer separation on ONE H200 (vhpc13/14/15, gpu:h200:1 each).
+#
+#   BSRO_INPUT=data BSRO_MODEL=4stem sbatch slurm/separate.sbatch
+#   sbatch --qos=gpulongjobs slurm/separate.sbatch        # if 'normal' is full
+#   BSRO_MODEL=vocals BSRO_BATCH_SIZE=16 sbatch slurm/separate.sbatch
+#
+# Env vars: BSRO_INPUT (file or dir, default: data), BSRO_MODEL (4stem|vocals),
+# BSRO_WEIGHTS_DIR (default: <repo>/weights), BSRO_OUTPUT (default: $HOME/work/orfeo/outputs/<jobid>),
+# BSRO_ENV (conda env, default: bsroformer), BSRO_BATCH_SIZE (chunks per forward, default: 8).
 #SBATCH --job-name=bsro-separate
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
 #SBATCH --partition=gpus
 #SBATCH --gres=gpu:h200:1
-#SBATCH --cpus-per-task=8
+# one H200 only; plain gpu:1 could land on an RTX6000/A40 node
+#SBATCH --cpus-per-task=4
+# 4 CPUs fits both QoS caps (normal: 120 per group, gpulongjobs: 10 per user)
 #SBATCH --mem=64G
 #SBATCH --time=02:00:00
 #SBATCH --output=logs/%x-%j.out
@@ -15,9 +25,9 @@ set -euo pipefail
 
 REPO_DIR="${BSRO_REPO_DIR:-$SLURM_SUBMIT_DIR}"
 WEIGHTS_DIR="${BSRO_WEIGHTS_DIR:-$REPO_DIR/weights}"
-INPUT="${BSRO_INPUT:?set BSRO_INPUT to an audio file or directory}"
-OUTPUT="${BSRO_OUTPUT:-$REPO_DIR/outputs/$SLURM_JOB_ID}"
-MODEL="${BSRO_MODEL:-4stem}"   # 4stem | vocals
+INPUT="${BSRO_INPUT:-$REPO_DIR/data}"
+OUTPUT="${BSRO_OUTPUT:-$HOME/work/orfeo/outputs/$SLURM_JOB_ID}"
+MODEL="${BSRO_MODEL:-4stem}"
 
 case "$MODEL" in
     4stem)
@@ -26,14 +36,19 @@ case "$MODEL" in
     vocals)
         CONFIG="$REPO_DIR/configs/model_bs_roformer_ep_317_sdr_12.9755.yaml"
         CKPT="$WEIGHTS_DIR/model_bs_roformer_ep_317_sdr_12.9755.ckpt" ;;
-    *) echo "unknown BSRO_MODEL=$MODEL" >&2; exit 1 ;;
+    *) echo "unknown BSRO_MODEL=$MODEL (use 4stem or vocals)" >&2; exit 1 ;;
 esac
+[ -f "$CKPT" ] || { echo "missing checkpoint $CKPT; run scripts/download_weights.sh" >&2; exit 1; }
+[ -e "$INPUT" ] || { echo "missing input $INPUT" >&2; exit 1; }
 
-eval "$(conda shell.bash hook)"
+source "$HOME/miniforge3/etc/profile.d/conda.sh"
 conda activate "${BSRO_ENV:-bsroformer}"
 cd "$REPO_DIR"
-mkdir -p logs
-nvidia-smi --query-gpu=name,memory.total --format=csv
+mkdir -p logs "$OUTPUT"
+
+echo "job $SLURM_JOB_ID on $(hostname) | model=$MODEL | input=$INPUT | output=$OUTPUT"
+nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+python -c "import torch; print('torch', torch.__version__, '| cuda', torch.version.cuda, '| gpu', torch.cuda.get_device_name(0))"
 
 python -m bsro.separate \
     --config "$CONFIG" \
@@ -43,3 +58,5 @@ python -m bsro.separate \
     --device cuda \
     --batch-size "${BSRO_BATCH_SIZE:-8}" \
     ${BSRO_EXTRA_ARGS:-}
+
+echo "### done -> $OUTPUT"
