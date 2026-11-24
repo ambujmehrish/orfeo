@@ -51,3 +51,13 @@ Writes `screen.csv` (per-track metrics and accept/reject/instrumental) and `scre
 ```bash
 BSRO_MUSDB=$HOME/work/orfeo/musdb18hq BSRO_MODEL=4stem sbatch slurm/eval_musdb.sbatch
 ```
+
+## Listen and inspect
+
+Gradio app with the original mix, the stems of both runs per track, the screen charts and the metrics table:
+
+```bash
+python -m bsro.review_app --inputs data --run vocals=$HOME/work/orfeo/outputs/1508415 --run 4stem=$HOME/work/orfeo/outputs/1508406
+```
+
+Open it from your laptop through an SSH tunnel (`ssh -N -L 7860:127.0.0.1:7860 <user>@vhpc01`, then http://localhost:7860), or add `--share` for a temporary public gradio.live link.
