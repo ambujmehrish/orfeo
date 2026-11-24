@@ -90,6 +90,28 @@ def read_screen(path: Path) -> tuple[list[dict], dict]:
     return rows, thresholds
 
 
+def find_lyrics_dir(run_dir: Path) -> Path | None:
+    dirs = sorted(d for d in run_dir.glob("lyrics_*") if (d / "lyrics.csv").exists())
+    if not dirs:
+        return None
+    # prefer the largest whisper model if several transcriptions exist
+    order = ["large-v3", "large", "large-v2", "turbo", "large-v3-turbo", "medium", "small", "base", "tiny"]
+    return min(dirs, key=lambda d: next((i for i, m in enumerate(order) if d.name == f"lyrics_{m}"), len(order)))
+
+
+def load_lyrics(lyrics_dir: Path | None, track: str) -> tuple[str, str, str]:
+    """Returns (header, text, timed segments) for a track, or a note when there is no transcript."""
+    if lyrics_dir is None:
+        return "no transcription found", "", ""
+    path = lyrics_dir / f"{track}.json"
+    if not path.exists():
+        return f"no transcript for this track in {lyrics_dir.name} (skipped as instrumental, or not run)", "", ""
+    rec = json.load(open(path))
+    header = f"Whisper {rec.get('model', '?')} · language: {rec.get('language', '?')} · {len(rec.get('segments', []))} segments"
+    lines = [f"[{seg['start']:6.1f} – {seg['end']:6.1f}]  {seg['text']}" + (f"   (no-speech p={seg['no_speech_prob']:.2f})" if seg.get("no_speech_prob", 0) > 0.5 else "") for seg in rec.get("segments", [])]
+    return header, rec.get("text", ""), "\n".join(lines)
+
+
 def collect_tracks(inputs: Path, runs: dict[str, Path]) -> list[dict]:
     tracks = []
     for mix in sorted(p for p in inputs.iterdir() if p.suffix.lower() in AUDIO_EXTENSIONS):
@@ -193,7 +215,7 @@ def tiles_html(rows: list[dict]) -> str:
     return '<div class="bsro-tiles">' + "".join(f'<div class="bsro-tile"><div class="n">{n}</div><div class="l">{l}</div></div>' for l, n in items) + "</div>"
 
 
-def build_app(inputs: Path, runs: dict[str, Path], rows: list[dict], thresholds: dict, title: str) -> gr.Blocks:
+def build_app(inputs: Path, runs: dict[str, Path], rows: list[dict], thresholds: dict, title: str, lyrics_dir: Path | None) -> gr.Blocks:
     tracks = collect_tracks(inputs, runs)
     by_name = {r["track"]: r for r in rows}
     labels = list(runs)
@@ -222,6 +244,8 @@ def build_app(inputs: Path, runs: dict[str, Path], rows: list[dict], thresholds:
                     updates.append(gr.update(value=str(stems[i]), label=f"{label} · {stems[i].stem}", visible=True))
                 else:
                     updates.append(gr.update(value=None, visible=False))
+        lyr_header, lyr_text, lyr_segments = load_lyrics(lyrics_dir, t["name"])
+        updates += [gr.update(value=lyr_text, label=f"Lyrics · {lyr_header}"), gr.update(value=lyr_segments)]
         return updates
 
     with gr.Blocks(title=title) as app:
@@ -244,7 +268,10 @@ def build_app(inputs: Path, runs: dict[str, Path], rows: list[dict], thresholds:
                         gr.Markdown(f"**{label}**")
                         for _ in range(MAX_STEMS):
                             stem_audios.append(gr.Audio(type="filepath", interactive=False, visible=False))
-            outputs = [header, metrics, mix_audio, *stem_audios]
+            lyrics_text = gr.Textbox(label="Lyrics", lines=6, max_lines=20, interactive=False)
+            with gr.Accordion("Timed segments", open=False):
+                lyrics_segments = gr.Textbox(label="start – end  text", lines=10, max_lines=60, interactive=False)
+            outputs = [header, metrics, mix_audio, *stem_audios, lyrics_text, lyrics_segments]
             selector.change(select, selector, outputs)
             app.load(select, selector, outputs)
         with gr.Tab("Charts"):
@@ -264,6 +291,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--inputs", required=True, help="directory with the original mixes")
     p.add_argument("--run", action="append", required=True, metavar="LABEL=DIR", help="separation run; the first is the model under test")
     p.add_argument("--screen", default=None, help="screen.csv from bsro.screen (default: <first run>/screen.csv)")
+    p.add_argument("--lyrics", default=None, help="transcription dir from bsro.transcribe (default: newest <first run>/lyrics_* if present)")
     p.add_argument("--title", default="BS-RoFormer separation review")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=7860)
@@ -295,7 +323,12 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("--auth expects USER:PASSWORD")
         auth = tuple(args.auth.split(":", 1))
 
-    app = build_app(inputs, runs, rows, thresholds, args.title)
+    lyrics_dir = Path(args.lyrics).resolve() if args.lyrics else find_lyrics_dir(next(iter(runs.values())))
+    if args.lyrics and not lyrics_dir.is_dir():
+        raise FileNotFoundError(f"lyrics directory not found: {lyrics_dir}")
+    print(f"lyrics: {lyrics_dir or 'none found'}")
+
+    app = build_app(inputs, runs, rows, thresholds, args.title, lyrics_dir)
     app.launch(server_name=args.host, server_port=args.port, share=args.share, auth=auth, css=CSS, allowed_paths=[str(inputs), *map(str, runs.values())])
     return 0
 

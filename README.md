@@ -48,7 +48,7 @@ BSRO_MUSDB=$HOME/work/orfeo/musdb18hq sbatch slurm/eval_musdb.sbatch
 ## Listen and inspect
 
 ```bash
-python -m bsro.review_app --inputs data --run vocals=$HOME/work/orfeo/outputs/<jobid>
+python -m bsro.review_app --inputs data --run vocals=$HOME/work/orfeo/outputs/<jobid>   # picks up <run>/lyrics_*/ automatically
 ```
 
 Then tunnel: `ssh -R 80:127.0.0.1:7860 serveo.net` (public link) or `ssh -N -L 7860:127.0.0.1:7860 <user>@vhpc01` (http://localhost:7860).
