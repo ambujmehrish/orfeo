@@ -8,7 +8,8 @@ WHICH="${1:-all}"
 mkdir -p "$WEIGHTS_DIR"
 
 fetch() {
-    local name="$1" url="$2" sha="$3" dest="$WEIGHTS_DIR/$name"
+    local name="$1" url="$2" sha="$3"
+    local dest="$WEIGHTS_DIR/$name"
     if [ -f "$dest" ] && echo "$sha  $dest" | sha256sum -c --quiet; then
         echo "ok (cached): $dest"
         return
