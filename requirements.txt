@@ -8,3 +8,4 @@ soundfile==0.14.0
 pyyaml==6.0.3
 numpy
 gradio==6.32.0
+openai-whisper==20250625

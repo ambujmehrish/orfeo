@@ -61,3 +61,13 @@ python -m bsro.review_app --inputs data --run vocals=$HOME/work/orfeo/outputs/15
 ```
 
 Open it from your laptop through an SSH tunnel (`ssh -N -L 7860:127.0.0.1:7860 <user>@vhpc01`, then http://localhost:7860), or add `--share` for a temporary public gradio.live link.
+
+## Lyrics from the vocal stems
+
+Whisper on the separated vocals (tracks the screen marked instrumental are skipped):
+
+```bash
+BSRO_RUN=$HOME/work/orfeo/outputs/1508415 sbatch slurm/transcribe.sbatch
+```
+
+Writes `<run>/lyrics_large-v3/<track>.json` (language, text, timed segments with confidence) and `lyrics.csv`. Set `BSRO_WHISPER=turbo` for a faster model or `BSRO_LANGUAGE=en` to force a language.
