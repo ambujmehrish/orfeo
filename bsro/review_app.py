@@ -196,6 +196,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=7860)
     p.add_argument("--share", action="store_true", help="create a public gradio.live link")
+    p.add_argument("--auth", default=None, metavar="USER:PASSWORD", help="require a login (use when exposing the app publicly)")
     args = p.parse_args(argv)
 
     runs: dict[str, Path] = {}
@@ -216,8 +217,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"warning: {screen} not found; metrics tabs will be empty", file=sys.stderr)
         rows, thresholds = [], {}
 
+    auth = None
+    if args.auth:
+        if ":" not in args.auth:
+            raise ValueError("--auth expects USER:PASSWORD")
+        auth = tuple(args.auth.split(":", 1))
+
     app = build_app(inputs, runs, rows, thresholds, args.title)
-    app.launch(server_name=args.host, server_port=args.port, share=args.share, css=CSS, allowed_paths=[str(inputs), *map(str, runs.values())])
+    app.launch(server_name=args.host, server_port=args.port, share=args.share, auth=auth, css=CSS, allowed_paths=[str(inputs), *map(str, runs.values())])
     return 0
 
 
