@@ -35,3 +35,19 @@ SLURM (one H200 on `gpus`): `BSRO_MODEL=4stem sbatch slurm/separate.sbatch` sepa
 ```bash
 python -m pytest -q tests
 ```
+
+## Evaluate separation quality
+
+**Reference-free screen** (the ORFEO quality screen: level, bleed, and agreement between two separators). Run both models on the same inputs, then:
+
+```bash
+python -m bsro.screen --run $HOME/work/orfeo/outputs/<vocals_job> --reference-run $HOME/work/orfeo/outputs/<4stem_job> --inputs data
+```
+
+Writes `screen.csv` (per-track metrics and accept/reject/instrumental) and `screen.json` (counts and thresholds) into the run directory.
+
+**Ground truth** on MUSDB18-HQ test (SDR as reported by MSST, plus SI-SDR), to confirm the lucidrains loading and chunked inference match the published numbers (4-stem: avg 9.65; vocals 11.08):
+
+```bash
+BSRO_MUSDB=$HOME/work/orfeo/musdb18hq BSRO_MODEL=4stem sbatch slurm/eval_musdb.sbatch
+```
