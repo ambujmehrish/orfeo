@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # BS-RoFormer separation on one H200.
 # Submit: sbatch slurm/separate.sbatch
-# Partition/account/QoS lines below must match the AdaRQ-Flow job script on the server.
+# H200 nodes on vhpc: partition "gpus" (vhpc13-15) or "gpulongjobs" (vhpc11-12,25-28).
 #SBATCH --job-name=bsro-separate
-#SBATCH --partition=TODO_H200_PARTITION
-#SBATCH --gres=gpu:1
+#SBATCH --partition=gpus
+#SBATCH --gres=gpu:h200:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=02:00:00
